@@ -1,0 +1,4 @@
+reference/
+.fixture_env/
+.DS_Store
+.Rhistory
