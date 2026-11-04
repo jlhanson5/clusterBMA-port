@@ -65,6 +65,7 @@ cbma_similarity <- function(A) {
 cbma_consensus <- function(A_list, weights) {
   if (length(A_list) != length(weights)) stop("A_list and weights have different lengths")
   N <- nrow(A_list[[1]])
+  if (any(vapply(A_list, nrow, 1L) != N)) stop("every matrix in A_list must have the same number of rows")
   C <- matrix(0, N, N)
   for (m in seq_along(A_list)) {
     if (weights[m] != 0) C <- C + weights[m] * cbma_similarity(A_list[[m]])
@@ -103,7 +104,8 @@ cbma_ssmf_step <- function(V, C, lambda, gradient = TRUE) {
 # restored on exit. An empty cluster is one that is no observation's top class.
 cbma_ssmf <- function(C, K, lambda = 1, n_iter = 5000, lr = 0.01, tol = NULL, seed = 1L) {
   if (!is.matrix(C) || nrow(C) != ncol(C)) stop("C must be a square matrix")
-  if (anyNA(C) || any(C < 0 | C > 1 + 1e-8)) stop("C must contain values in [0, 1]")
+  # Rows accepted by cbma_check_inputs (within 1e-6 of 1) can give C just above 1.
+  if (anyNA(C) || any(C < 0 | C > 1 + 1e-5)) stop("C must contain values in [0, 1]")
   N <- nrow(C)
   had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
   if (had_seed) old_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)

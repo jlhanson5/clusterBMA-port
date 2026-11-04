@@ -185,3 +185,27 @@ The D tolerances are the worst of the 20 seeds with a 25% margin (Jamie's decisi
 | D | 0, 0 | 1e-16 | 1.000 | .0012 | 1.000 | 3, 3 | 29 s |
 
 Times were measured with the GMM experiment using 8 of 10 cores, against 7-12 s for the reference. Step 6 will measure scale properly.
+
+## Steps 4-5 (2026-11-03)
+
+`tests/testthat/test-parity.R` and `test-determinism.R`. Full suite on the final code: 48 tests, 152 expectations, 0 failures, 0 errors, 0 skips, in about 5 minutes.
+
+| Scenario, port seed | Max diff: CIVI, weights | Max diff: consensus | ARI | Mean abs diff | Uncertainty r | Empty: port, reference |
+|---|---|---|---|---|---|---|
+| A, 1 | 0, 0 | 0 | 1.0000 | .0001 | 1.0000 | 0, 0 |
+| B, 1 | 0, 0 | 3e-16 | 1.0000 | .0001 | 1.0000 | 1, 1 |
+| C, 1 | 0, 0 | 0 | 1.0000 | .0002 | 1.0000 | 1, 1 |
+| D, 1 | 0, 0 | 1e-16 | 1.0000 | .0012 | .9998 | 3, 3 |
+| D, 2 | | | 1.0000 | .0001 | 1.0000 | |
+| D, 3 | | | 1.0000 | .0279 | .8664 | |
+| D, 4 | | | 1.0000 | .0001 | 1.0000 | |
+| D, 5 | | | 1.0000 | .0278 | .8672 | |
+
+**Scenario D:** port seeds 3 and 5 land on the same second solution the reference reaches (reference floor: .0270-.0280, r .8656-.8757). The port reproduces both solutions, not just one. Five seeds are run because one could not exercise the loosened tolerance.
+
+**What these tests do not cover:**
+- Probabilities are compared on the reference's non-empty columns only, the same as the floor. Empty columns have no label overlap to align them by, so their leftover probability is not compared.
+- Only the Calinski-Harabasz path is compared with the reference. `S_Dbw` and the "min" formula are unit-tested only, because no fixture uses them.
+- Fixtures stop at N = 500. Nothing here tests behaviour at ABCD's size; that is Step 6.
+
+**Bug the tests found:** the range check added to `cbma_ssmf` rejected `C` values above 1 + 1e-8, but rows accepted within 1e-6 of 1 can produce values just above 1, so valid input could stop. The check now allows 1 + 1e-5.
