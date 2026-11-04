@@ -120,3 +120,20 @@ The spec says to follow the source where they disagree. Items marked **decision*
 
 19. **Penalty strength at ABCD scale.** The data term sums about N^2 pairs, while the penalty is at most `G * sqrt(N)` with `lambda = 1`. The penalty therefore shrinks relative to the data term as N grows, so clusters that empty at N = 300 may not empty at N of 8,000-12,000. The Step 1 scenarios go up to N = 500 only, so they would not reveal this.
 20. **`NaN` loss.** If a row of `P` gets close to one-hot, `A_ii` can round to 1 in float32. On the diagonal, `S_ii = 1` makes the term `0 * log(0)`, which is `NaN`, and the mask does not remove it because `NaN * 0` is `NaN` (`R/SimplexClust.R:55-56,64`). Off-diagonal pairs with `S_ij = 1` can do the same. Doubles push this threshold much further out, so the port and the reference could differ here.
+
+## Decisions (2026-11-03)
+
+Jamie accepted these after reading the items above. The spec now reflects them.
+
+| # | Decision | Notes item |
+|---|---|---|
+| 1 | Port lives in its own folder and git repository, `clusterBMA_port` | 18 |
+| 2 | `tol` off by default | 7 |
+| 3 | `cbma_weights` stops on non-finite or non-positive values: deliberate difference | 10 |
+| 4 | Direction from a port lookup table; seven elbow-rule indices rejected | 11 |
+| 5 | Empty cluster = no observation's top class | 8 |
+| 6 | Doubles, off-diagonal terms only, error if the objective is not finite: deliberate difference | 15, 20 |
+| 7 | Equal priors only | 12 |
+| 8 | Fixtures pinned to Python 3.10.9 and TF 2.11, TF seed set in `make_reference.R`, simulated data only | 9, 16 |
+| 9 | `lambda = 1` stays; Step 6 also reports empty clusters at each N | 19 |
+| 10 | Step 6 runs after the GMM optima experiment finishes | |
