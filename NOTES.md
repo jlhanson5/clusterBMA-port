@@ -153,7 +153,15 @@ Fixtures are in `tests/testthat/fixtures/`, from `tools/make_reference.R`, simul
 
 **Reproducibility:** with the TF seed set, the same seed gives an identical factorisation (max abs diff 0), and rerunning the whole script reproduced A-C exactly.
 
-**Step 4 risk:** the other-seed columns compare the reference with itself, on one seed pair. On D it misses two Step 4 tolerances (mean abs diff < .02, uncertainty correlation >= .95), so a correct port could fail those on D through initialisation alone. Not resolved; tolerances unchanged.
+**Scenario D's tolerances (changed from the spec's defaults).** The other-seed columns above compare the reference with itself, on one seed pair. D missed two Step 4 tolerances that way, so the floor was measured against the D fixture across 20 seeds (`meta$seed_floor` in `D.rds`):
+
+| Measure | Spec tolerance | Near solution (10 seeds) | Second solution (10 seeds) | D tolerance |
+|---|---|---|---|---|
+| Hard labels, ARI | >= .95 | 1.000 | 1.000 | >= .95 (unchanged) |
+| Mean abs diff, non-empty columns | < .02 | .0000-.0013 | .0270-.0280 | < .035 |
+| Uncertainty correlation | >= .95 | .9997-1.0000 | .8656-.8757 | >= .83 |
+
+The D tolerances are the worst of the 20 seeds with a 25% margin (Jamie's decision to set them from the floor; the margin is my choice). They are looser, and they cannot tell the two solutions apart: a port on either one passes. A-C keep the spec's tolerances.
 
 **Empty clusters confirm item 3:** in D, columns that are no observation's top class still reach probabilities of .26 and .22, so "empty" does not mean near zero. B and C also lose one column each, at N = 300 and 500.
 

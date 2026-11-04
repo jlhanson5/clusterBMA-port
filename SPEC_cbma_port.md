@@ -112,8 +112,10 @@ For each fixture scenario:
 
 - CIVI values and weights: match within 1e-6.
 - Consensus matrix: max abs diff below 1e-8.
-- Final allocations: align clusters to the reference with `clue::solve_LSAP` on the cross-tabulation, then require ARI of hard labels >= 0.95 and mean abs diff of aligned allocation probabilities < 0.02.
-- Uncertainty: correlation with reference >= 0.95.
+- Final allocations: align clusters to the reference with `clue::solve_LSAP` on the cross-tabulation, then require ARI of hard labels >= 0.95 and mean abs diff of aligned allocation probabilities < 0.02 (scenario D: < 0.035).
+- Uncertainty: correlation with reference >= 0.95 (scenario D: >= 0.83).
+
+Scenario D's two tolerances are set from the reference's own seed-to-seed floor (20 seeds, worst seed plus a 25% margin; see `NOTES.md`). Its factorisation has two solutions, so a correct port can land on either.
 
 The factorization is stochastic and TF numerics differ, so allocations are tested on agreement, not exact equality. If a scenario fails, report the numbers. Do not loosen a tolerance without saying so in `NOTES.md`.
 

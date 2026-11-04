@@ -120,9 +120,27 @@ for (nm in names(scenario)) {
   other <- SimplexClust(S = res[[1]], G = s$K_BMA)[[1]]
 
   # Seed-to-seed floor for Step 4: align non-empty columns by label overlap.
-  lab_other <- max.col(other, "first")
   cols <- sort(unique(hard$alloc_vector))
-  match_col <- vapply(cols, \(j) which.max(tabulate(lab_other[hard$alloc_vector == j], s$K_BMA)), 1L)
+  versus_reference <- function(P) {
+    lab <- max.col(P, "first")
+    match_col <- vapply(cols, \(j) which.max(tabulate(lab[hard$alloc_vector == j], s$K_BMA)), 1L)
+    c(ari = ari(lab, hard$alloc_vector),
+      mean_abs_diff = mean(abs(res[[2]][, cols] - P[, match_col])),
+      uncertainty_cor = cor(hard$alloc_uncertainty, 1 - apply(P, 1, max)))
+  }
+  other_vs <- versus_reference(other)
+
+  # Scenario D varies by seed more than the spec's tolerances allow, so its floor
+  # is measured across 20 seeds (the first is the "other seed" above).
+  floor_d <- NULL
+  if (nm == "D") {
+    floor_d <- t(vapply(seed + seq_len(20), function(sd) {
+      seed_tf(sd)
+      versus_reference(SimplexClust(S = res[[1]], G = s$K_BMA)[[1]])
+    }, numeric(3)))
+    rownames(floor_d) <- seed + seq_len(20)
+    print(round(floor_d, 4))
+  }
 
   meta <- c(versions(), list(
     scenario = nm, K_BMA = s$K_BMA, index = INDEX, direction = "max",
@@ -130,9 +148,10 @@ for (nm in names(scenario)) {
     nonempty_columns = sort(unique(hard$alloc_vector)),
     same_seed_max_abs_diff = max(abs(same - res[[2]])),
     same_seed_ari = ari(max.col(same, "first"), hard$alloc_vector),
-    other_seed_ari = ari(lab_other, hard$alloc_vector),
-    other_seed_mean_abs_diff = mean(abs(res[[2]][, cols] - other[, match_col])),
-    other_seed_uncertainty_cor = cor(hard$alloc_uncertainty, 1 - apply(other, 1, max))))
+    other_seed_ari = other_vs[["ari"]],
+    other_seed_mean_abs_diff = other_vs[["mean_abs_diff"]],
+    other_seed_uncertainty_cor = other_vs[["uncertainty_cor"]],
+    seed_floor = floor_d))
 
   saveRDS(list(X = s$X, truth = s$truth, inputs = s$inputs, seed = seed,
                civi = civi[[INDEX]], weights = civi$W_m, weights_returned = res[[5]],
