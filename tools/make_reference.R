@@ -75,11 +75,11 @@ scenario <- list(
          inputs = list(`kmeans_3` = km(b$X, 3), `kmeans_4` = km(b$X, 4), `kmeans_5` = km(b$X, 5),
                        `gmm_4` = gmm(b$X, 4, seed)))
   },
-  # Different K (2, 3, 6) on the same data, K_BMA = 6, to exercise empty clusters.
-  # The spec does not name the methods; one each of hard, soft and hierarchical.
+  # Different K (2, 3, 6) on the same data, K_BMA = 6, to exercise empty clusters:
+  # 3 true clusters, so K_BMA exceeds what the data support. The spec does not name
+  # the methods; one each of hard, soft and hierarchical.
   D = function(seed) {
-    a <- 2 * pi * (1:6) / 6
-    b <- blobs(cbind(7 * cos(a), 7 * sin(a)), 50)
+    b <- blobs(rbind(c(0, 0), c(8, 0), c(4, 7)), 100)
     list(X = b$X, truth = b$truth, K_BMA = 6,
          inputs = list(`kmeans_2` = km(b$X, 2), `gmm_3` = gmm(b$X, 3, seed), `ward_6` = ward(b$X, 6)))
   })
@@ -88,7 +88,7 @@ SEEDS <- c(A = 20261101L, B = 20261102L, C = 20261103L, D = 20261104L)
 ari <- function(x, y) mclust::adjustedRandIndex(x, y)
 versions <- function() {
   cfg <- reticulate::py_config()
-  list(package_commit = COMMIT, python = as.character(cfg$version),
+  list(package_commit = COMMIT, python = sub(" .*", "", cfg$version_string),
        tensorflow = as.character(tf$version$VERSION), r = R.version.string,
        clusterCrit = as.character(packageVersion("clusterCrit")),
        ClusterR = as.character(packageVersion("ClusterR")),
@@ -119,13 +119,20 @@ for (nm in names(scenario)) {
   seed_tf(seed + 1L)
   other <- SimplexClust(S = res[[1]], G = s$K_BMA)[[1]]
 
+  # Seed-to-seed floor for Step 4: align non-empty columns by label overlap.
+  lab_other <- max.col(other, "first")
+  cols <- sort(unique(hard$alloc_vector))
+  match_col <- vapply(cols, \(j) which.max(tabulate(lab_other[hard$alloc_vector == j], s$K_BMA)), 1L)
+
   meta <- c(versions(), list(
     scenario = nm, K_BMA = s$K_BMA, index = INDEX, direction = "max",
     input_names = names(s$inputs), fit_secs = secs,
     nonempty_columns = sort(unique(hard$alloc_vector)),
     same_seed_max_abs_diff = max(abs(same - res[[2]])),
     same_seed_ari = ari(max.col(same, "first"), hard$alloc_vector),
-    other_seed_ari = ari(max.col(other, "first"), hard$alloc_vector)))
+    other_seed_ari = ari(lab_other, hard$alloc_vector),
+    other_seed_mean_abs_diff = mean(abs(res[[2]][, cols] - other[, match_col])),
+    other_seed_uncertainty_cor = cor(hard$alloc_uncertainty, 1 - apply(other, 1, max))))
 
   saveRDS(list(X = s$X, truth = s$truth, inputs = s$inputs, seed = seed,
                civi = civi[[INDEX]], weights = civi$W_m, weights_returned = res[[5]],
@@ -133,8 +140,8 @@ for (nm in names(scenario)) {
                labels_ordered = hard$alloc_ordered, uncertainty = hard$alloc_uncertainty,
                meta = meta),
           file.path(dest, paste0(nm, ".rds")))
-  cat(sprintf("%s: N=%d, weights %s, non-empty %d of %d, ARI truth %.3f, same-seed ARI %.3f (max diff %.2g), other-seed ARI %.3f, %.0f s\n",
+  cat(sprintf("%s: N=%d, weights %s, non-empty %d of %d, ARI truth %.3f, same-seed ARI %.3f (max diff %.2g), other-seed ARI %.3f, mean diff %.4f, uncertainty r %.3f, %.0f s\n",
               nm, nrow(s$X), paste(round(civi$W_m, 3), collapse = "/"), length(meta$nonempty_columns), s$K_BMA,
               ari(hard$alloc_vector, s$truth), meta$same_seed_ari, meta$same_seed_max_abs_diff,
-              meta$other_seed_ari, secs))
+              meta$other_seed_ari, meta$other_seed_mean_abs_diff, meta$other_seed_uncertainty_cor, secs))
 }

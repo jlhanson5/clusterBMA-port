@@ -2,3 +2,4 @@ reference/
 .fixture_env/
 .DS_Store
 .Rhistory
+.claude/settings.local.json

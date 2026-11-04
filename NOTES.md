@@ -137,3 +137,24 @@ Jamie accepted these after reading the items above. The spec now reflects them.
 | 8 | Fixtures pinned to Python 3.10.9 and TF 2.11, TF seed set in `make_reference.R`, simulated data only | 9, 16 |
 | 9 | `lambda = 1` stays; Step 6 also reports empty clusters at each N | 19 |
 | 10 | Step 6 runs after the GMM optima experiment finishes | |
+
+## Step 1 results (2026-11-03)
+
+Fixtures are in `tests/testthat/fixtures/`, from `tools/make_reference.R`, simulated data only. Package commit `4fba136`, Python 3.10.9, TF 2.11.0 (`tensorflow-macos`, the arm64 build), numpy 1.23.5. The environment is in `.fixture_env/` (2.1 GB, gitignored); deleting that folder removes it.
+
+| Scenario | N x dims | Inputs | K_BMA | Weights | Non-empty | ARI, truth | Other seed: ARI | Other seed: mean abs diff | Other seed: uncertainty r |
+|---|---|---|---|---|---|---|---|---|---|
+| A | 500 x 2 | kmeans 5, GMM 5 | 5 | .501, .499 | 5 | .985 | 1.000 | .0001 | 1.000 |
+| B | 300 x 2 | kmeans 3, GMM 3, Ward 4 | 4 | .363, .363, .273 | 3 | 1.000 | 1.000 | .0000 | 1.000 |
+| C | 500 x 20 | kmeans 3, 4, 5, GMM 4 | 5 | .292, .253, .227, .229 | 4 | .286 | 1.000 | .0003 | 1.000 |
+| D | 300 x 2 | kmeans 2, GMM 3, Ward 6 | 6 | .081, .565, .354 | 3 | 1.000 | 1.000 | .0271 | .875 |
+
+**Choices the spec left open:** `K_BMA` for B and C is the largest input K; D uses 3 true clusters and one each of k-means, GMM and Ward.
+
+**Reproducibility:** with the TF seed set, the same seed gives an identical factorisation (max abs diff 0), and rerunning the whole script reproduced A-C exactly.
+
+**Step 4 risk:** the other-seed columns compare the reference with itself, on one seed pair. On D it misses two Step 4 tolerances (mean abs diff < .02, uncertainty correlation >= .95), so a correct port could fail those on D through initialisation alone. Not resolved; tolerances unchanged.
+
+**Empty clusters confirm item 3:** in D, columns that are no observation's top class still reach probabilities of .26 and .22, so "empty" does not mean near zero. B and C also lose one column each, at N = 300 and 500.
+
+**Precision:** reference rows sum to 1 within about 1.5e-7 (float32), so the 1e-8 row-sum test can apply to the port but not to the fixtures.
