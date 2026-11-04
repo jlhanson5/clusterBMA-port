@@ -166,3 +166,22 @@ The D tolerances are the worst of the 20 seeds with a 25% margin (Jamie's decisi
 **Empty clusters confirm item 3:** in D, columns that are no observation's top class still reach probabilities of .26 and .22, so "empty" does not mean near zero. B and C also lose one column each, at N = 300 and 500.
 
 **Precision:** reference rows sum to 1 within about 1.5e-7 (float32), so the 1e-8 row-sum test can apply to the port but not to the fixtures.
+
+## Steps 2-3 (2026-11-03)
+
+`R/cbma.R` and `tests/testthat/test-cbma.R`. Run: `Rscript --vanilla -e 'testthat::test_dir("tests/testthat")'`.
+
+**How decision 6 was implemented.** A term with a zero coefficient is left out instead of being evaluated: `(1 - C_ij) log(1 - A_ij)` when `C_ij = 1`, and `C_ij log(A_ij)` when `C_ij = 0`. This is the cross-entropy limit, not clipping; without it, hard inputs would reach `0 * log(0)` and stop. Any other non-finite objective stops with an error.
+
+**Additions beyond Step 2's list:** `cbma_ssmf` refuses a `C` with values outside [0, 1]; `cbma_check_inputs` carries out Step 5's two input checks, because `cbma_fit` needs them; `cbma_ssmf`'s `seed` defaults to 1 so no call depends on global RNG state. `cbma_project_simplex()` was not written (Step 0).
+
+**Informal comparison with the fixtures (not the Step 4 tests), port seed 1, K_BMA as in the fixture:**
+
+| Scenario | Max diff: CIVI, weights | Max diff: consensus | ARI | Mean abs diff | Uncertainty r | Empty: reference, port | Port time |
+|---|---|---|---|---|---|---|---|
+| A | 0, 0 | 0 | 1.000 | .0001 | 1.000 | 0, 0 | 82 s |
+| B | 0, 0 | 3e-16 | 1.000 | .0001 | 1.000 | 1, 1 | 29 s |
+| C | 0, 0 | 0 | 1.000 | .0002 | 1.000 | 1, 1 | 81 s |
+| D | 0, 0 | 1e-16 | 1.000 | .0012 | 1.000 | 3, 3 | 29 s |
+
+Times were measured with the GMM experiment using 8 of 10 cores, against 7-12 s for the reference. Step 6 will measure scale properly.
