@@ -4,7 +4,7 @@ A plain R port of clusterBMA (Forbes et al., 2023, PLOS ONE, [doi:10.1371/journa
 
 This repository holds the method only. The ABCD multiverse will call it later; no ABCD data are used or stored here, and the test fixtures are simulated.
 
-**Status:** matches the original package on all four test scenarios, up to N = 500. Scale is not yet measured (see [Limits](#limits)).
+**Status:** matches the original package on all four test scenarios, up to N = 500. Full fits are measured up to N = 12,000; that size takes about 2.4 hours (see [Limits](#limits)).
 
 ## Requirements
 
@@ -98,8 +98,8 @@ The suite takes about 5 minutes. Per-scenario results are in `NOTES.md`. The fix
 
 ## Limits
 
-- **Scale is not measured.** The Step 6 benchmark (`tools/benchmark.R`) has not been written or run. Time grows with at least N squared: scenario B took 29 s at N = 300 on a busy machine, which extrapolates to roughly 13 hours at N = 12,000, ABCD's approximate size. That is a rough figure, not a measurement. The consensus matrix alone is about 1.1 GB at that size.
-- **Empty clusters at large N are untested.** The penalty stays at the original's `lambda = 1`, and it may be too weak at large N.
+- **Large N is slow.** Benchmark on simulated data, 6 inputs, K_BMA = 6 (`tools/benchmark.R`, tables in `NOTES.md`). With Apple's vecLib BLAS: 4.1 min at N = 2,000, 23 min at N = 5,000 and 2.4 hours at N = 12,000 (about 2.8 hours projected with R's default BLAS), peaking at 8.3 GB. That is over the spec's 30-minute limit. Results do not depend on the BLAS beyond rounding (about 1e-15).
+- **Empty clusters hold up with N.** The penalty stays at the original's `lambda = 1`. With 4 true clusters and K_BMA = 6, 2 clusters empty at N = 2,000, 5,000 and 12,000. These simulated clusters are cleaner than CBCL scores.
 - **Only Calinski-Harabasz is compared with the original.** `S_Dbw` and the minimise branch have unit tests but no reference fixture.
 - **Scenario D has looser tolerances.** Its factorisation has two solutions, and the original package reaches both. The port does too. See `NOTES.md`.
 - **Calinski-Harabasz values do not compare across data scales**, which matters if inputs are fitted on different transformations of the data.

@@ -79,19 +79,31 @@ cbma_consensus <- function(A_list, weights) {
 # column L2 norms. A term with a zero coefficient is left out, not evaluated, so a
 # hard C (C_ij = 1) with A_ij = 1 contributes 0 rather than 0 * log(0). Anything else
 # non-finite is left to reach the caller, which stops: there is no clipping.
-cbma_ssmf_step <- function(V, C, lambda, gradient = TRUE) {
+# Whole-matrix arithmetic, with the left-out terms zeroed afterwards, so each step
+# holds fewer N x N temporaries. `parts` is what never changes between steps.
+cbma_ssmf_parts <- function(C) {
+  d <- seq(1, length(C), by = nrow(C) + 1)
+  list(comp = 1 - C,
+       skip_on = c(d, which(C <= 0)),   # no C log(A) term: diagonal, C = 0
+       skip_off = c(d, which(C >= 1)))  # no (1 - C) log(1 - A) term: diagonal, C >= 1
+}
+
+cbma_ssmf_step <- function(V, C, lambda, gradient = TRUE, parts = cbma_ssmf_parts(C)) {
   P0 <- -plogis(-V, log.p = TRUE)       # softplus(V), stable for large |V|
   s <- rowSums(P0)
   P <- P0 / s
   A <- tcrossprod(P)
-  on <- C > 0; diag(on) <- FALSE        # the C log(A) terms
-  off <- C < 1; diag(off) <- FALSE      # the (1 - C) log(1 - A) terms
   norms <- sqrt(colSums(P^2))
-  value <- -sum(C[on] * log(A[on])) - sum((1 - C[off]) * log1p(-A[off])) + lambda * sum(norms)
+  term <- C * log(A); term[parts$skip_on] <- 0
+  value <- -sum(term)
+  term <- parts$comp * log1p(-A); term[parts$skip_off] <- 0
+  value <- value - sum(term) + lambda * sum(norms)
+  rm(term)
   if (!gradient) return(list(value = value, P = P))
-  D <- matrix(0, nrow(C), ncol(C))
-  D[on] <- -C[on] / A[on]
-  D[off] <- D[off] + (1 - C[off]) / (1 - A[off])
+  D <- -C / A; D[parts$skip_on] <- 0
+  A <- parts$comp / (1 - A); A[parts$skip_off] <- 0   # A now holds the second gradient term
+  D <- D + A
+  rm(A)
   G <- 2 * (D %*% P) + lambda * sweep(P, 2, norms, "/")          # d objective / d P
   list(value = value, P = P, grad = (G - rowSums(G * P)) / s * plogis(V))
 }
@@ -119,8 +131,9 @@ cbma_ssmf <- function(C, K, lambda = 1, n_iter = 5000, lr = 0.01, tol = NULL, se
   m <- v <- matrix(0, N, K)
   trace <- numeric(n_iter)
   used <- n_iter
+  parts <- cbma_ssmf_parts(C)
   for (t in seq_len(n_iter)) {
-    step <- cbma_ssmf_step(V, C, lambda)
+    step <- cbma_ssmf_step(V, C, lambda, parts = parts)
     if (!is.finite(step$value) || anyNA(step$grad))
       stop(sprintf("objective is not finite at step %d", t))
     trace[t] <- step$value
@@ -132,7 +145,7 @@ cbma_ssmf <- function(C, K, lambda = 1, n_iter = 5000, lr = 0.01, tol = NULL, se
     v <- beta2 * v + (1 - beta2) * step$grad^2
     V <- V - lr * sqrt(1 - beta2^t) / (1 - beta1^t) * m / (sqrt(v) + eps)
   }
-  final <- cbma_ssmf_step(V, C, lambda, gradient = FALSE)
+  final <- cbma_ssmf_step(V, C, lambda, gradient = FALSE, parts = parts)
   if (!is.finite(final$value)) stop("objective is not finite at the final step")
   list(alloc = final$P, objective_trace = trace[seq_len(used)], iterations = used,
        empty_clusters = setdiff(seq_len(K), max.col(final$P, ties.method = "first")))

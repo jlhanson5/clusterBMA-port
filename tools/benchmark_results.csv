@@ -1,0 +1,4 @@
+"N","date","weights","inputs_secs","index_secs","consensus_secs","consensus_peak_mb","pilot_secs","pilot_peak_mb","projected_mins","full_run","ssmf_mins","ssmf_peak_mb","empty_clusters","ari_truth","smallest_class","blas"
+12000,"2026-11-06 20:11","0.173/0.186/0.169/0.122/0.181/0.168",2,9.5,2.2,5531,185.1,10510,771.2,FALSE,NA,NA,NA,NA,NA,"libRblas.0.dylib"
+2000,"2026-11-06 20:19","0.172/0.183/0.172/0.125/0.178/0.171",1.7,0.3,0.1,186,2.3,423,9.4,TRUE,8.7,399,2,0.973,0.097,"libRblas.0.dylib"
+5000,"2026-11-06 21:11","0.172/0.186/0.171/0.122/0.18/0.17",1.8,1.4,0.3,990,12.4,2066,51.8,TRUE,51.4,2328,2,0.96,0.0926,"libRblas.0.dylib"

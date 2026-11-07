@@ -209,3 +209,57 @@ Times were measured with the GMM experiment using 8 of 10 cores, against 7-12 s 
 - Fixtures stop at N = 500. Nothing here tests behaviour at ABCD's size; that is Step 6.
 
 **Bug the tests found:** the range check added to `cbma_ssmf` rejected `C` values above 1 + 1e-8, but rows accepted within 1e-6 of 1 can produce values just above 1, so valid input could stop. The check now allows 1 + 1e-5.
+
+## Step 6 (2026-11-06)
+
+`tools/benchmark.R`, one process per N under `/usr/bin/time -l`, with nothing else running. Raw rows are in `tools/benchmark_results.csv`. Simulated data: 4 unequal clusters in 4 dimensions, 6 inputs (k-means K = 2, 3, 4, 6; `Mclust` G = 3, 4), K_BMA = 6. R's default reference BLAS (`libRblas`), on the M5 Mac with 16 GB.
+
+| N | Consensus time | Consensus peak | SSMF time, 5000 steps | SSMF peak (R heap) | Process peak footprint | Empty clusters | ARI, truth |
+|---|---|---|---|---|---|---|---|
+| 2,000 | 0.1 s | 186 MB | 8.7 min | 399 MB | 0.6 GB | 2 | .973 |
+| 5,000 | 0.3 s | 990 MB | 51.4 min | 2.3 GB | 3.3 GB | 2 | .960 |
+| 12,000 | 2.2 s | 5.5 GB | not run; 12.9 h projected | 10.5 GB in 20 steps | 15.0 GB | not measured | not measured |
+
+**N = 12,000 is over both Step 6 limits (30 min, 8 GB), so it was stopped after a 20-step pilot.** Nothing was changed in response; the options are for Jamie to choose.
+
+**The 12.9 h projection is probably pessimistic.** The pilot projection was accurate at 2,000 and 5,000 (9.4 vs 8.7 min; 51.8 vs 51.4 min), but at 12,000 the process hit memory pressure on a 16 GB machine: 65 s of system time in 199 s real, against 2-6 s of system time in the two smaller full runs. Scaling the N = 5,000 time by N squared gives about 5 h without that pressure. That is an extrapolation, not a measurement.
+
+**Consensus and index times are not the problem.** Time and memory are in the factorisation.
+
+**Sizes that matter for ABCD**, extrapolated by N squared from N = 5,000, without memory pressure: the sample is 10,088 (8,331 with one child per family), not 12,000. About 3.5 h and 9.5 GB R heap at 10,088; about 2.4 h and 6.5 GB at 8,331.
+
+**Empty clusters (decision 9):** 2 of 6 at N = 2,000 and N = 5,000, the same as at N = 300 in the smoke test, with 4 true clusters. So `lambda = 1` does not weaken across this range on this data. Untested at 12,000, and these clusters are cleaner than CBCL scores.
+
+**Options, none applied:**
+- Plain R: reuse the masks and index vectors in `cbma_ssmf_step` rather than rebuilding them each step. No new dependency. Lowers memory; the time gain is unknown.
+- Accelerated BLAS (Apple vecLib, shipped with CRAN R). No code change, but it replaces a library in the R installation. Could speed the matrix products; untested, and results may differ slightly in the last digits.
+- RcppArmadillo (spec's option). Most control over allocation and speed; adds a compile step.
+- Float storage (spec's option). Halves matrix memory; the source's float32 shows rows summing to 1 only within about 1.5e-7. Little speed gain expected.
+- R `torch` (spec's option). Could use the GPU, but brings back a large dependency, and the port exists to avoid that kind of stack.
+
+## Step 6, after tightening (2026-11-06)
+
+Jamie chose to tighten the R code and test vecLib. `cbma_ssmf_step` now uses whole-matrix arithmetic and zeroes the left-out terms afterwards, with what never changes held in `cbma_ssmf_parts`. Rows are in `tools/benchmark_results_tightened.csv`.
+
+| N | BLAS | SSMF time, 5000 steps | R heap peak | Process peak | Empty clusters | ARI, truth |
+|---|---|---|---|---|---|---|
+| 2,000 | vecLib | 4.1 min | 264 MB | 0.4 GB | 2 | .973 |
+| 5,000 | vecLib | 23.2 min | 1.4 GB | 1.9 GB | 2 | .960 |
+| 12,000 | reference | not run; 2.8 h projected | 7.8 GB | 8.3 GB | not measured | not measured |
+| 12,000 | vecLib | not run; 2.3 h projected | 7.8 GB | 8.3 GB | not measured | not measured |
+| 12,000 | vecLib, full run (2026-11-07) | 2.4 h (145.5 min) | 7.7 GB | 8.3 GB | 2 | .960 |
+
+**N = 12,000 is still over the 30-minute limit, and at the 8 GB limit (under by R heap, just over by process footprint).** It stopped after the 20-step pilot. The pilot projections were again accurate at the sizes run in full (4.4 vs 4.1 min; 23.1 vs 23.2 min), and there is no sign of memory pressure now (under 2 s of system time).
+
+**Most of the gain comes from tightening.** At N = 12,000: 12.9 h to 2.8 h from tightening, part of which is the end of memory pressure, then 2.8 h to 2.3 h from vecLib (about 18%). vecLib makes one 3000 x 3000 `tcrossprod` about 57 times faster, so that small overall gain suggests element-by-element arithmetic now takes most of each step. That part is an inference; no profile was run.
+
+**Same results.**
+- Old and tightened code: `identical()` allocations and objective traces on fixtures A-D and on C with exact 0s and 1s, with values just above 1, and from two hard solutions (500 steps each, reference BLAS).
+- The full suite passes on both libraries: 48 tests, 152 expectations, 0 failures.
+- Reference vs vecLib: at N = 2,000, K = 6, 300 steps, max allocation difference 9e-16, same labels. On fixture C, 5000 steps, the difference was exactly 0; `tcrossprod` with few columns was identical in both libraries at N = 2,000, while `C %*% P` differed by 2e-13.
+
+**Extrapolated by N squared from the N = 12,000 vecLib pilot:** about 95 min at N = 10,088 and 65 min at N = 8,331. R heap about 5.5 GB and 3.7 GB.
+
+**How vecLib was loaded:** one process at a time, with a symlink to R's `libRblas.vecLib.dylib` in a scratch folder and `DYLD_LIBRARY_PATH` set when calling `bin/exec/R` directly. The R installation was not changed and still uses the reference BLAS by default.
+
+**Full run at N = 12,000 (2026-11-07, Jamie's go-ahead to exceed the time limit once):** 145.5 min against 140.1 projected, peak memory as in the pilot (8.3 GB process), no memory pressure (19 s of system time in 2.4 h). 2 of 6 clusters empty, ARI with truth .960, smallest class 8.9%: the same as at N = 2,000 and 5,000, so on this data `lambda = 1` does not weaken up to N = 12,000. These simulated clusters are cleaner than CBCL scores. The run used `tools/benchmark.R 12000 <file> force`.
