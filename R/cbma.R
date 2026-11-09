@@ -53,6 +53,43 @@ cbma_weights <- function(civi_values, direction) {
   w / sum(w)
 }
 
+# Weights that do not come from a validity index. None of these is in the original
+# package; they feed the same consensus and factorisation code (see NOTES.md).
+# Equal weight for each of M inputs.
+cbma_weights_equal <- function(M) {
+  if (length(M) != 1 || !is.finite(M) || M < 1 || M != round(M)) stop("M must be a positive whole number")
+  rep(1 / M, M)
+}
+
+# Each group (for example each k) gets the same total weight, split equally among its
+# inputs. Use it when some groups have more inputs than others, so that a group is not
+# up-weighted just because more methods produced a solution there.
+cbma_weights_grouped <- function(group) {
+  if (length(group) == 0 || anyNA(group)) stop("group must be non-empty with no NA")
+  g <- as.character(group)
+  n <- table(g)
+  as.vector(1 / (length(n) * n[g]))
+}
+
+# Element-wise mean of several weight vectors over the same inputs (each must already
+# be a valid weight vector: non-negative, summing to 1).
+cbma_weights_average <- function(...) {
+  W <- list(...)
+  if (length(W) == 0) stop("no weight vectors given")
+  if (length(unique(lengths(W))) != 1) stop("weight vectors have different lengths")
+  for (w in W) cbma_check_weights(w, length(w))
+  rowMeans(do.call(cbind, W))
+}
+
+# Weights supplied by the caller must be finite, non-negative, one per input and sum
+# to 1 within 1e-8 (they are used as given, not renormalised).
+cbma_check_weights <- function(weights, M) {
+  if (!is.numeric(weights) || length(weights) != M) stop(sprintf("weights must be a numeric vector of length %d", M))
+  if (!all(is.finite(weights)) || any(weights < 0)) stop("weights must be finite and non-negative")
+  if (abs(sum(weights) - 1) > 1e-8) stop("weights must sum to 1")
+  invisible(TRUE)
+}
+
 # Paper Eq 4.
 cbma_similarity <- function(A) {
   S <- tcrossprod(A)
@@ -169,15 +206,25 @@ cbma_check_inputs <- function(X, A_list) {
 
 # The whole method. K_BMA defaults to the largest K across inputs, the paper's
 # heuristic. The consensus matrix is returned only on request (it is N x N).
+# weights = NULL (the default) computes weights from `index`, as the original does.
+# A numeric vector (for example from cbma_weights_equal or cbma_weights_grouped) is
+# used as given instead; X is then only checked for row count, and civi is NA.
 cbma_fit <- function(X, A_list, K_BMA = NULL, index = "Calinski_Harabasz",
                      keep_consensus = FALSE, lambda = 1, n_iter = 5000, lr = 0.01,
-                     tol = NULL, seed = 1L) {
+                     tol = NULL, seed = 1L, weights = NULL) {
   X <- as.matrix(X)
   cbma_check_inputs(X, A_list)
   if (is.null(K_BMA)) K_BMA <- max(vapply(A_list, ncol, 1L))
-  civi <- lapply(A_list, \(A) cbma_civi(X, A, index))
-  values <- vapply(civi, `[[`, 0, "value")
-  weights <- cbma_weights(values, civi[[1]]$direction)
+  if (is.null(weights)) {
+    civi <- lapply(A_list, \(A) cbma_civi(X, A, index))
+    values <- vapply(civi, `[[`, 0, "value")
+    direction <- civi[[1]]$direction
+    weights <- cbma_weights(values, direction)
+  } else {
+    cbma_check_weights(weights, length(A_list))
+    values <- rep(NA_real_, length(A_list))
+    index <- direction <- NA_character_
+  }
   C <- cbma_consensus(A_list, weights)
   f <- cbma_ssmf(C, K_BMA, lambda = lambda, n_iter = n_iter, lr = lr, tol = tol, seed = seed)
   list(weights = weights, civi = values,
@@ -186,7 +233,7 @@ cbma_fit <- function(X, A_list, K_BMA = NULL, index = "Calinski_Harabasz",
        labels = max.col(f$alloc, ties.method = "first"),
        uncertainty = cbma_uncertainty(f$alloc),
        empty_clusters = f$empty_clusters,
-       settings = list(K_BMA = K_BMA, index = index, direction = civi[[1]]$direction,
+       settings = list(K_BMA = K_BMA, index = index, direction = direction,
                        lambda = lambda, n_iter = n_iter, lr = lr, tol = tol, seed = seed,
                        iterations = f$iterations),
        objective_trace = f$objective_trace)

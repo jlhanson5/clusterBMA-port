@@ -263,3 +263,26 @@ Jamie chose to tighten the R code and test vecLib. `cbma_ssmf_step` now uses who
 **How vecLib was loaded:** one process at a time, with a symlink to R's `libRblas.vecLib.dylib` in a scratch folder and `DYLD_LIBRARY_PATH` set when calling `bin/exec/R` directly. The R installation was not changed and still uses the reference BLAS by default.
 
 **Full run at N = 12,000 (2026-11-07, Jamie's go-ahead to exceed the time limit once):** 145.5 min against 140.1 projected, peak memory as in the pilot (8.3 GB process), no memory pressure (19 s of system time in 2.4 h). 2 of 6 clusters empty, ARI with truth .960, smallest class 8.9%: the same as at N = 2,000 and 5,000, so on this data `lambda = 1` does not weaken up to N = 12,000. These simulated clusters are cleaner than CBCL scores. The run used `tools/benchmark.R 12000 <file> force`.
+
+## Use at scale: the ABCD multiverse (2026-11-08)
+
+The ABCD project (`jlhanson5/abcd-clustering-multiverse`, script `12_cbma.R`) ran 16 full fits. No ABCD data are in this repository; only run-level numbers are recorded here.
+
+- **Size:** N = 8,331, 32 hard inputs per fit (96 in one pooled fit), K_BMA = 6, 5,000 steps, vecLib loaded as above.
+- **Time:** 73-87 min per fit, nearly all in the factorisation; index and consensus took under 30 s. That is above the 65 min extrapolated from the simulated N = 12,000 pilot; the cause was not profiled. The number of inputs barely matters: the 96-input fit took 83 min.
+- **Memory:** about 4.0-4.5 GB per process, as observed during the runs. Two fits at once ran safely in 16 GB with nothing else running.
+- **Empty clusters:** 3 or 4 of the 6 columns were used in every fit, so `lambda = 1` still leaves columns empty on real, overlapping data.
+- **Convergence:** the objective still fell by about 1e-4 (relative) over the last 500 steps. A 10,000-step rerun of one fit (162 min) lowered the objective by a further 0.03%; labels agreed with the 5,000-step fit at ARI .96 (the same 4 clusters; about 2% of people moved, mostly between two neighbouring clusters). 5,000 steps was enough there.
+- **Uncertainty with hard inputs:** mean 1 − max probability was .17-.27. With one-hot inputs this measures disagreement between inputs, not uncertainty inside any one model, and it peaks for people on the borders between clusters.
+- **Weights:** Calinski-Harabasz weights were close to flat across inputs (as in the paper's case study), so CH and equal weights gave similar clusters (ARI .81-.95 by data scale). S_Dbw differed most (ARI with the other weightings down to .46 on one scale).
+- **Never edit a script while a long fit runs it:** Rscript reads the file as it goes, and an edit killed two runs.
+
+## Non-index weights (2026-11-09)
+
+The ABCD inputs were uneven by k: model-based methods had no usable solution at some k, so k = 2-3 had 7 inputs and k = 5-6 had 5-6. Equal weights per input then give more total weight to the k values with more inputs. Three weight options were added to the port, none of them in the original package:
+
+- `cbma_weights_equal(M)`: 1/M each.
+- `cbma_weights_grouped(group)`: each group (for example each k) gets the same total, split equally within the group ("k-balanced").
+- `cbma_weights_average(...)`: the element-wise mean of several weight vectors (for example CH, S_Dbw and equal weights).
+
+`cbma_fit(..., weights = w)` uses them as given and skips the index; `civi` and `settings$index` are then NA. Supplied weights must be finite, non-negative and sum to 1 within 1e-8; they are not renormalised, so a mistake is not hidden. With `weights = NULL` (the default) nothing changes: the parity tests pass as before, and a test checks that passing the index weights back in gives an `identical()` allocation.

@@ -173,6 +173,41 @@ test_that("cbma_fit: end to end on well-separated data", {
   expect_equal(dim(cbma_fit(X, A_list, keep_consensus = TRUE, n_iter = 5)$consensus), c(45L, 45L))
 })
 
+test_that("cbma_weights_equal / grouped / average: sums, group shares, means", {
+  expect_equal(cbma_weights_equal(4), rep(.25, 4))
+  expect_error(cbma_weights_equal(0), "positive whole")
+  k <- rep(2:6, c(7, 7, 6, 6, 6))                  # the uneven-k case from the ABCD inputs
+  w <- cbma_weights_grouped(k)
+  expect_equal(sum(w), 1)
+  expect_equal(as.vector(tapply(w, k, sum)), rep(.2, 5))
+  expect_equal(w[k == 4], rep(1 / 30, 6))
+  expect_equal(cbma_weights_grouped(factor(c("a", "b", "b"))), c(.5, .25, .25))
+  expect_error(cbma_weights_grouped(c(1, NA)), "NA")
+  a <- c(.5, .3, .2); b <- c(.2, .2, .6)
+  expect_equal(cbma_weights_average(a, b, cbma_weights_equal(3)), (a + b + 1 / 3) / 3)
+  expect_error(cbma_weights_average(a, c(.5, .5)), "different lengths")
+  expect_error(cbma_weights_average(a, c(.5, .5, .5)), "sum to 1")
+})
+
+test_that("cbma_fit: supplied weights give the index path's result when they match it", {
+  set.seed(15)
+  truth <- rep(1:3, each = 15)
+  X <- cbind(c(0, 8, 4)[truth], c(0, 0, 7)[truth]) + matrix(rnorm(90), 45)
+  A_list <- list(cbma_hard_to_prob(kmeans(X, 3, nstart = 10)$cluster),
+                 cbma_hard_to_prob(cutree(hclust(dist(X), "ward.D2"), 4)),
+                 cbma_hard_to_prob(cutree(hclust(dist(X), "average"), 2)))
+  f_idx <- cbma_fit(X, A_list, n_iter = 200, seed = 3)
+  f_w <- cbma_fit(X, A_list, n_iter = 200, seed = 3, weights = f_idx$weights)
+  expect_identical(f_w$alloc, f_idx$alloc)
+  expect_true(all(is.na(f_w$civi)))
+  expect_true(is.na(f_w$settings$index))
+  f_eq <- cbma_fit(X, A_list, n_iter = 200, seed = 3, weights = cbma_weights_equal(3))
+  expect_equal(f_eq$weights, rep(1 / 3, 3))
+  expect_error(cbma_fit(X, A_list, weights = c(.5, .5)), "length 3")
+  expect_error(cbma_fit(X, A_list, weights = c(.5, .6, -.1)), "non-negative")
+  expect_error(cbma_fit(X, A_list, weights = c(.5, .3, .3)), "sum to 1")
+})
+
 test_that("cbma_fit: refuses mismatched N and rows that do not sum to 1", {
   X <- matrix(rnorm(20), 10); good <- cbma_hard_to_prob(rep(1:2, 5))
   expect_error(cbma_fit(X, list(good, good[-1, ])), "nrow")
