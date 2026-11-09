@@ -118,3 +118,7 @@ The suite takes about 5 minutes. Per-scenario results are in `NOTES.md`. The fix
 - **Only Calinski-Harabasz is compared with the original.** `S_Dbw` and the minimise branch have unit tests but no reference fixture.
 - **Scenario D has looser tolerances.** Its factorisation has two solutions, and the original package reaches both. The port does too. See `NOTES.md`.
 - **Calinski-Harabasz values do not compare across data scales**, which matters if inputs are fitted on different transformations of the data.
+
+## License
+
+MIT, as for the original package (see `LICENSE`). Please cite Forbes et al. (2023) for the method.
